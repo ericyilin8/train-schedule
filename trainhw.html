@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Train Scheduler</title>
+    <link rel='stylesheet' href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/momentjs/2.12.0/moment.min.js"></script>
+</head>
+
+<body>
+    <div class='jumbotron'>
+        <h1 class='text-center' style='color:darkgrey'>Anytime is Train Time</h1>
+    </div>
+    <div class='card'>
+        <div class='card-header'>
+            Current Train Schedule
+        </div>
+        <table id='schedule' class='table'>
+            <thead>
+                <tr>
+                    <th scope='col'>Train Name</th>
+                    <th scope='col'>Destination</th>
+                    <th scope='col'>Frequency (min)</th>
+                    <th scope='col'>Next Arrival</th>
+                    <th scope='col'>Minutes Away</th>
+                </tr>
+            </thead>
+        </table>
+    </div>
+    <br>
+    <div class='card'>
+        <div class='card-header'>Add Train</div>
+        <form style='padding:10px;'>
+            <div class='form-group'>
+                <label for='trainName'>Train Name</label>
+                <input type='text' id='trainName' class='form-control'>
+            </div>
+            <div class='form-group'>
+                <label for='destination'>Destination</label>
+                <input type='text' id='destination' class='form-control'>
+            </div>
+            <div class='form-group'>
+                <label for='firstTime'>First Train Time (HH:mm - military time)</label>
+                <input type='text' id='firstTime' class='form-control'>
+            </div>
+            <div class='form-group'>
+                <label for='frequency'>Frequency (min)</label>
+                <input type='text' id='frequency' class='form-control'>
+            </div>
+            <button type='submit' id='submit' class='btn btn-primary' onclick='return false;'>Submit</button>
+        </form>
+    </div>
+
+
+    <script src="https://www.gstatic.com/firebasejs/5.9.4/firebase.js"></script>
+    <script>
+        // Initialize Firebase
+        var config = {
+            apiKey: "AIzaSyBLxQ21DMkBkhbENmJJEKP5fHurgYUyWgw",
+            authDomain: "train-13ddc.firebaseapp.com",
+            databaseURL: "https://train-13ddc.firebaseio.com",
+            projectId: "train-13ddc",
+            storageBucket: "",
+            messagingSenderId: "737164902080"
+        };
+        firebase.initializeApp(config);
+
+        var database = firebase.database();
+
+        //submit new train
+        $('#submit').on('click', function () {
+
+            var name = $('#trainName').val().trim();
+            var destination = $('#destination').val().trim();
+
+            var firstTime = $('#firstTime').val().trim();
+            var freq = ($('#frequency').val().trim());
+
+            var nextandaway = findNextandAway(firstTime, freq);
+
+            database.ref().push({
+                trainName: name,
+                destination: destination,
+                frequency: freq,
+                next: nextandaway[0],
+                away: nextandaway[1],
+                first: firstTime
+            });
+        });
+
+        /*database.ref().on('child_added', function (snapshot) {
+
+            var train = snapshot.val();
+            //console.log(snapshot);
+
+            var nextandaway = findNextandAway(train.first, train.frequency);
+            
+            database.ref(snapshot.key).update({
+                next: nextandaway[0],
+                away: nextandaway[1]
+            })
+            //snapshot.forEach(function(childsnap){
+                //console.log(snapshot);
+            //});
+
+            var row = $('<tr>');
+            row.append('<td>' + train.trainName + '</td>');
+            row.append('<td>' + train.destination + '</td>');
+            row.append('<td>' + train.frequency + '</td>');
+            row.append('<td>' + nextandaway[0] + '</td>');
+            row.append('<td>' + nextandaway[1] + '</td>');
+            $('#schedule').append(row);
+
+        }); */
+
+        //everytime something changes change the display and once with initial data
+        database.ref().on('value', function (snapshot) {
+            $('#schedule > tr').remove()
+            snapshot.forEach(function (childsnapshot) {
+
+                var train = childsnapshot.val();
+
+                var row = $('<tr>');
+                row.append('<td>' + train.trainName + '</td>');
+                row.append('<td>' + train.destination + '</td>');
+                row.append('<td>' + train.frequency + '</td>');
+                row.append('<td>' + train.next + '</td>');
+                row.append('<td>' + train.away + '</td>');
+                $('#schedule').append(row);
+
+            })
+
+        })
+
+        //calculate the next arrival and minutes away using the current time and the frequency of the train
+        function findNextandAway(first, freq) {
+
+            freq = Number(freq);
+
+            var firstTime = first.split(':');
+            var time = [moment().hour(), moment().minute()];
+
+
+            var hoursDiff = Math.abs(time[0] - Number(firstTime[0]));
+            var minDiff = Math.abs(time[1] - Number(firstTime[1])) + hoursDiff * 60;
+
+            var minFromLast = minDiff % freq;
+            var minToNext = freq - minFromLast;
+            var nextMoment = moment().add(minToNext, 'm');
+
+            var next = [nextMoment.format('h:mm A'), minToNext];
+            return next;
+
+        }
+
+        //update the arrival and minutes away in the database
+        function update() {
+
+            database.ref().once('value').then(function (snapshot) {
+                //console.log(snapshot);
+                snapshot.forEach(function (childsnapshot) {
+
+                    var train = childsnapshot.val();
+                    var nextandaway = findNextandAway(train.first, train.frequency);
+                    database.ref(childsnapshot.key).update({
+                        next: nextandaway[0],
+                        away: nextandaway[1]
+                    })
+                })
+
+
+
+
+                //snapshot.forEach(function(childsnap){
+                //console.log(snapshot);
+                //});
+
+            });
+
+        }
+
+        //update once on load and every second
+        update();
+        setInterval(update,1000);
+
+    </script>
+
+</body>
+
+</html>
